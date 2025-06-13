@@ -26,13 +26,13 @@ pip install -r requirements.txt
 
 2. Download data
 ```bash
-wget https://www.dropbox.com/scl/fi/3bqhiz8uzcol2ge28ruce/data.zip?rlkey=ljhilzs8qam2m0mohru3otmx7&st=wkc7ehq7&dl=0 -O data.zip
+wget "https://www.dropbox.com/scl/fi/3bqhiz8uzcol2ge28ruce/data.zip?rlkey=ljhilzs8qam2m0mohru3otmx7&st=wkc7ehq7&dl=0" -O data.zip
 unzip data.zip  
 ```
 
 4. Run an experiment:
 ```bash
-python run_exp.py --config configs/config.yaml
+python run_exp.py configs/config.yaml
 ```
 
 ## Configuration
