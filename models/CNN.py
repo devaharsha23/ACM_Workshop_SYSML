@@ -195,10 +195,10 @@ class CNN_model(nn.Module):
             )
 
             train_loader = torch.utils.data.DataLoader(
-                train_dataset, shuffle=True, batch_size=train_batch_size, drop_last=True,
+                train_dataset, shuffle=True, batch_size=train_batch_size, drop_last=False,
             )
             test_loader = torch.utils.data.DataLoader(
-                test_dataset, shuffle=True, batch_size=test_batch_size, drop_last=True,
+                test_dataset, shuffle=True, batch_size=test_batch_size, drop_last=False,
             )
             logger.info(
                 f"CID{cid}_DATA_LOADED, NUM_ITEMS:{len(train_dataset)}/{len(test_dataset)}"
