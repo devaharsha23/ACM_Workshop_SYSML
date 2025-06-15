@@ -7,6 +7,7 @@ import pickle
 from datetime import datetime
 import importlib
 import random
+from client_selector import SmartClientSelector
 
 # Third-party imports
 import numpy as np
@@ -37,7 +38,7 @@ def fix_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
-def setup_client_selection(server, CS_algo, CS_args):
+def setup_client_selection(server, CS_algo, CS_args, selector=None, client_profiles=None):
     """
     Sets up the client selection strategy based on the specified algorithm.
     
@@ -49,6 +50,18 @@ def setup_client_selection(server, CS_algo, CS_args):
     Returns:
         tuple: (client_selection_function, updated_CS_args)
     """
+    if CS_algo == "smart":
+        def smart_selection(client_list, CS_args):
+            selected = selector.select_clients(CS_args["num_clients_per_round"])
+            for cid in selected:
+                client_profiles[cid]["rounds_used"] += 1
+            selector.total_rounds += 1
+            return selected
+
+
+        return smart_selection, CS_args
+
+    
     # Get the client selection function from the server instance
     client_selection = getattr(server, f"client_selection_{CS_algo}", None)
     
@@ -77,7 +90,7 @@ def setup_aggregation(server, Agg_algo, Agg_args):
     
     return aggregation, Agg_args
 
-def main(rounds, seed, client_list, client_selection, CS_args, aggregation, Agg_args, client_train_config, client_test_config):  
+def main(rounds, seed, client_list, client_selection, CS_args, aggregation, Agg_args, client_train_config, client_test_config, selector=None, client_profiles=None):
     """
     Main function to run the federated learning simulation.
     """
@@ -97,8 +110,9 @@ def main(rounds, seed, client_list, client_selection, CS_args, aggregation, Agg_
         Agg_args["round"] = rnd
         
         # Time the client selection process
-        cs_start_time = time.time()
         selected_cids = client_selection(client_list, CS_args)
+
+        cs_start_time = time.time()
         cs_time = time.time() - cs_start_time
         cumulative_stats['client_selection_time'] += cs_time
         
@@ -106,7 +120,7 @@ def main(rounds, seed, client_list, client_selection, CS_args, aggregation, Agg_
         
         # Track training time across all clients
         total_train_time = 0
-        
+
         for cid in selected_cids:
             # Training time
             train_start_time = time.time()
@@ -172,11 +186,13 @@ if __name__ == "__main__":
         <path_to_yaml> : Path to the experiment configuration file in YAML format.
     """
 
+
     if len(sys.argv) < 2:
         print("Usage: python run_exp.py <path_to_yaml>")
     else:
         # Parsing config file
-        config_yaml_path = sys.argv[1]
+        # config_yaml_path = sys.argv[1]
+        config_yaml_path = "configs/config.yaml"
         exp_config = None
         try:
             with open(config_yaml_path, 'r') as file:
@@ -290,6 +306,21 @@ if __name__ == "__main__":
                                     )
                 client_obj.model.load_state_dict(torch.load(initial_model_path, weights_only=False).state_dict())
                 client_list.append(client_obj)
+
+            client_profiles = {}
+
+            for client in client_list:
+                # Assumes you’ve stored these during client initialization
+                profile = {
+                    "time": client.minibatch_time,                     # from Step 2 profiling
+                    "size": len(client.train_data.dataset),            # number of samples
+                    "diversity": len(set(label.item() if hasattr(label, 'item') else label for _, label in client.train_data.dataset)),
+                    "rounds_used": 0
+                }
+                client_profiles[client.cid] = profile
+
+            selector = SmartClientSelector(client_profiles)
+
             
             # Making an Aggregator
             server = Server(
@@ -307,7 +338,21 @@ if __name__ == "__main__":
                                
             # Setting correct CS function
             
-            client_selection, CS_args = setup_client_selection(server, CS_algo, CS_args)
+            client_selection, CS_args = setup_client_selection(server, CS_algo, CS_args, selector, client_profiles)
             aggregation, Agg_args = setup_aggregation(server, Agg_algo, Agg_args)
 
-            main(total_rounds, seed, client_list, client_selection, CS_args, aggregation, Agg_args, client_train_config, client_test_config)
+            main(
+                total_rounds,
+                seed,
+                client_list,
+                client_selection,
+                CS_args,
+                aggregation,
+                Agg_args,
+                client_train_config,
+                client_test_config,
+                selector=selector,
+                client_profiles=client_profiles
+            )
+
+
